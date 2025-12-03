@@ -26,6 +26,17 @@ class TrainResponse(BaseModel):
     message: str
     task_id: Optional[str] = None
 
+class PredictRequest(BaseModel):
+    variant_id: str
+
+class PredictResponse(BaseModel):
+    variant_id: str
+    forecast_7d: float
+    forecast_14d: float
+    forecast_30d: float
+    confidence: float
+    generated_at: str
+
 # Storage per status training
 training_status = {}
 
@@ -228,7 +239,7 @@ async def train_lstm_model(background_tasks: BackgroundTasks, epochs: int = 50):
                 cwd="/home/mirko/nfr-ml",
                 capture_output=True,
                 text=True,
-                timeout=3600  # 1 ora max
+                timeout=3600
             )
             
             if result.returncode == 0:
@@ -266,6 +277,207 @@ async def train_lstm_model(background_tasks: BackgroundTasks, epochs: int = 50):
         task_id=task_id
     )
 
+# ==================== TRAINING XGBOOST ====================
+
+@app.post("/train/xgboost", response_model=TrainResponse)
+async def train_xgboost_model(background_tasks: BackgroundTasks, n_estimators: int = 100):
+    """Allena XGBoost"""
+    
+    task_id = f"train_xgboost_{int(time.time())}"
+    training_status[task_id] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat()
+    }
+    
+    def run_training():
+        try:
+            result = subprocess.run(
+                ["python", "models/train_xgboost.py", "--n_estimators", str(n_estimators)],
+                cwd="/home/mirko/nfr-ml",
+                capture_output=True,
+                text=True,
+                timeout=1800
+            )
+            
+            training_status[task_id] = {
+                "status": "completed" if result.returncode == 0 else "failed",
+                "output": result.stdout,
+                "error": result.stderr if result.returncode != 0 else None,
+                "completed_at": datetime.now().isoformat()
+            }
+        except Exception as e:
+            training_status[task_id] = {
+                "status": "failed",
+                "error": str(e),
+                "completed_at": datetime.now().isoformat()
+            }
+    
+    background_tasks.add_task(run_training)
+    
+    return TrainResponse(
+        status="started",
+        message=f"XGBoost training started with {n_estimators} estimators",
+        task_id=task_id
+    )
+
+# ==================== TRAINING RANDOM FOREST ====================
+
+@app.post("/train/random-forest", response_model=TrainResponse)
+async def train_rf_model(background_tasks: BackgroundTasks, n_estimators: int = 100):
+    """Allena Random Forest"""
+    
+    task_id = f"train_rf_{int(time.time())}"
+    training_status[task_id] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat()
+    }
+    
+    def run_training():
+        try:
+            result = subprocess.run(
+                ["python", "models/train_random_forest.py", "--n_estimators", str(n_estimators)],
+                cwd="/home/mirko/nfr-ml",
+                capture_output=True,
+                text=True,
+                timeout=1800
+            )
+            
+            training_status[task_id] = {
+                "status": "completed" if result.returncode == 0 else "failed",
+                "output": result.stdout,
+                "error": result.stderr if result.returncode != 0 else None,
+                "completed_at": datetime.now().isoformat()
+            }
+        except Exception as e:
+            training_status[task_id] = {
+                "status": "failed",
+                "error": str(e),
+                "completed_at": datetime.now().isoformat()
+            }
+    
+    background_tasks.add_task(run_training)
+    
+    return TrainResponse(
+        status="started",
+        message=f"Random Forest training started with {n_estimators} estimators",
+        task_id=task_id
+    )
+
+# ==================== TRAINING PROPHET ====================
+
+@app.post("/train/prophet", response_model=TrainResponse)
+async def train_prophet_model(background_tasks: BackgroundTasks, top_variants: int = 50):
+    """Allena Prophet sui top variants"""
+    
+    task_id = f"train_prophet_{int(time.time())}"
+    training_status[task_id] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat()
+    }
+    
+    def run_training():
+        try:
+            result = subprocess.run(
+                ["python", "models/train_prophet.py", "--top_variants", str(top_variants)],
+                cwd="/home/mirko/nfr-ml",
+                capture_output=True,
+                text=True,
+                timeout=3600
+            )
+            
+            training_status[task_id] = {
+                "status": "completed" if result.returncode == 0 else "failed",
+                "output": result.stdout,
+                "error": result.stderr if result.returncode != 0 else None,
+                "completed_at": datetime.now().isoformat()
+            }
+        except Exception as e:
+            training_status[task_id] = {
+                "status": "failed",
+                "error": str(e),
+                "completed_at": datetime.now().isoformat()
+            }
+    
+    background_tasks.add_task(run_training)
+    
+    return TrainResponse(
+        status="started",
+        message=f"Prophet training started for top {top_variants} variants",
+        task_id=task_id
+    )
+
+# ==================== TRAINING ALL MODELS ====================
+
+@app.post("/train/all", response_model=TrainResponse)
+async def train_all_models(background_tasks: BackgroundTasks):
+    """Allena tutti i modelli in sequenza (LSTM, XGBoost, Random Forest)"""
+    
+    task_id = f"train_all_{int(time.time())}"
+    training_status[task_id] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat()
+    }
+    
+    def run_all_training():
+        try:
+            outputs = []
+            
+            # Train LSTM
+            print("Training LSTM...")
+            result = subprocess.run(
+                ["python", "models/train_lstm.py", "--epochs", "50"],
+                cwd="/home/mirko/nfr-ml",
+                capture_output=True,
+                text=True,
+                timeout=3600
+            )
+            outputs.append(f"=== LSTM ===\n{result.stdout}")
+            
+            # Train XGBoost
+            print("Training XGBoost...")
+            result = subprocess.run(
+                ["python", "models/train_xgboost.py", "--n_estimators", "100"],
+                cwd="/home/mirko/nfr-ml",
+                capture_output=True,
+                text=True,
+                timeout=1800
+            )
+            outputs.append(f"=== XGBoost ===\n{result.stdout}")
+            
+            # Train Random Forest
+            print("Training Random Forest...")
+            result = subprocess.run(
+                ["python", "models/train_random_forest.py", "--n_estimators", "100"],
+                cwd="/home/mirko/nfr-ml",
+                capture_output=True,
+                text=True,
+                timeout=1800
+            )
+            outputs.append(f"=== Random Forest ===\n{result.stdout}")
+            
+            training_status[task_id] = {
+                "status": "completed",
+                "output": "\n\n".join(outputs),
+                "error": None,
+                "completed_at": datetime.now().isoformat()
+            }
+        except Exception as e:
+            training_status[task_id] = {
+                "status": "failed",
+                "error": str(e),
+                "completed_at": datetime.now().isoformat()
+            }
+    
+    background_tasks.add_task(run_all_training)
+    
+    return TrainResponse(
+        status="started",
+        message="Training all models (LSTM, XGBoost, Random Forest) - this will take time",
+        task_id=task_id
+    )
+
+# ==================== TASK STATUS ====================
+
 @app.get("/train/status/{task_id}")
 async def get_training_status(task_id: str):
     """Controlla lo status di un task"""
@@ -286,7 +498,7 @@ async def list_all_tasks():
 
 @app.get("/data/info")
 async def get_data_info():
-    """Info sui dataset"""
+    """Info sui dataset preparati"""
     
     metadata_path = "/home/mirko/nfr-ml/data/metadata.json"
     
@@ -298,22 +510,11 @@ async def get_data_info():
     
     return metadata
 
-# ==================== PREDICTION ====================
-
-class PredictRequest(BaseModel):
-    variant_id: str
-
-class PredictResponse(BaseModel):
-    variant_id: str
-    forecast_7d: float
-    forecast_14d: float
-    forecast_30d: float
-    confidence: float
-    generated_at: str
+# ==================== PREDICTION - SINGLE MODEL ====================
 
 @app.post("/predict/demand", response_model=PredictResponse)
 async def predict_demand(request: PredictRequest):
-    """Prevede la domanda per un variant"""
+    """Prevede la domanda usando il modello LSTM base"""
     try:
         result = subprocess.run(
             ["python", "models/predict.py", "--variant_id", request.variant_id],
@@ -325,7 +526,7 @@ async def predict_demand(request: PredictRequest):
         
         if result.returncode == 0:
             prediction = json.loads(result.stdout)
-            return PredictResponse(**prediction)
+            return prediction
         else:
             return {
                 "error": "Prediction failed",
@@ -335,6 +536,72 @@ async def predict_demand(request: PredictRequest):
         return {
             "error": str(e)
         }
+
+# ==================== PREDICTION - ENSEMBLE ====================
+
+@app.post("/predict/ensemble")
+async def predict_ensemble(request: PredictRequest):
+    """Previsione ensemble (combina LSTM + XGBoost + RF)"""
+    try:
+        result = subprocess.run(
+            ["python", "models/ensemble_predict.py", "--variant_id", request.variant_id],
+            cwd="/home/mirko/nfr-ml",
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode == 0:
+            prediction = json.loads(result.stdout)
+            return prediction
+        else:
+            return {
+                "error": "Ensemble prediction failed",
+                "details": result.stderr
+            }
+    except Exception as e:
+        return {
+            "error": str(e)
+        }
+
+# ==================== MODELS INFO ====================
+
+@app.get("/models/info")
+async def get_models_info():
+    """Info sui modelli allenati"""
+    
+    models_info = {}
+    artifacts_path = "/home/mirko/nfr-ml/models/artifacts"
+    
+    if not os.path.exists(artifacts_path):
+        return {"error": "No models trained yet"}
+    
+    # Check LSTM
+    if os.path.exists(f"{artifacts_path}/lstm_demand_forecast.h5"):
+        models_info["lstm"] = {
+            "status": "trained",
+            "file": "lstm_demand_forecast.h5"
+        }
+        if os.path.exists(f"{artifacts_path}/training_history.json"):
+            with open(f"{artifacts_path}/training_history.json", 'r') as f:
+                models_info["lstm"]["history"] = json.load(f)
+    
+    # Check XGBoost
+    if os.path.exists(f"{artifacts_path}/xgboost_metadata.json"):
+        with open(f"{artifacts_path}/xgboost_metadata.json", 'r') as f:
+            models_info["xgboost"] = json.load(f)
+    
+    # Check Random Forest
+    if os.path.exists(f"{artifacts_path}/random_forest_metadata.json"):
+        with open(f"{artifacts_path}/random_forest_metadata.json", 'r') as f:
+            models_info["random_forest"] = json.load(f)
+    
+    # Check Prophet
+    if os.path.exists(f"{artifacts_path}/prophet_metadata.json"):
+        with open(f"{artifacts_path}/prophet_metadata.json", 'r') as f:
+            models_info["prophet"] = json.load(f)
+    
+    return models_info
 
 # ==================== SYSTEM INFO ====================
 
@@ -359,3 +626,4 @@ async def system_info():
         }
     except Exception as e:
         return {"error": str(e)}
+
