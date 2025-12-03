@@ -1,4 +1,4 @@
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional
 import tensorflow as tf
@@ -96,6 +96,60 @@ async def git_status():
         }
     except Exception as e:
         return {"status": "error", "error": str(e)}
+
+# ==================== FILE UPLOAD ====================
+
+@app.post("/upload/service-account")
+async def upload_service_account(file: UploadFile = File(...)):
+    """Carica il file serviceAccountKey.json"""
+    try:
+        file_path = "/home/mirko/nfr-ml/serviceAccountKey.json"
+        
+        # Leggi contenuto
+        content = await file.read()
+        
+        # Salva file
+        with open(file_path, "wb") as f:
+            f.write(content)
+        
+        # Verifica che sia un JSON valido
+        with open(file_path, "r") as f:
+            json.load(f)
+        
+        return {
+            "status": "success",
+            "message": "Service account key uploaded successfully",
+            "file_path": file_path,
+            "file_size": len(content)
+        }
+    except json.JSONDecodeError:
+        return {
+            "status": "error",
+            "message": "Invalid JSON file"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
+@app.get("/upload/service-account/status")
+async def check_service_account():
+    """Verifica se il service account key esiste"""
+    file_path = "/home/mirko/nfr-ml/serviceAccountKey.json"
+    
+    if os.path.exists(file_path):
+        file_size = os.path.getsize(file_path)
+        return {
+            "status": "exists",
+            "file_path": file_path,
+            "file_size": file_size
+        }
+    else:
+        return {
+            "status": "missing",
+            "message": "Service account key not found"
+        }
 
 # ==================== DATA PREPARATION ====================
 
