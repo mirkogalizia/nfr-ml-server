@@ -18,8 +18,8 @@ class HealthResponse(BaseModel):
 class CommandResponse(BaseModel):
     status: str
     message: str
-    output: Optional[str] = ""
-    error: Optional[str] = ""
+    output: str = ""
+    error: str = ""
 
 class TrainResponse(BaseModel):
     status: str
@@ -105,14 +105,12 @@ async def upload_service_account(file: UploadFile = File(...)):
     try:
         file_path = "/home/mirko/nfr-ml/serviceAccountKey.json"
         
-        # Leggi contenuto
         content = await file.read()
         
-        # Salva file
         with open(file_path, "wb") as f:
             f.write(content)
         
-        # Verifica che sia un JSON valido
+        # Verifica JSON valido
         with open(file_path, "r") as f:
             json.load(f)
         
@@ -155,7 +153,7 @@ async def check_service_account():
 
 @app.post("/train/prepare-data", response_model=TrainResponse)
 async def prepare_training_data(background_tasks: BackgroundTasks):
-    """Prepara i dati per il training (esegue prepare_training_data.py)"""
+    """Prepara i dati per il training"""
     
     task_id = f"prepare_data_{int(time.time())}"
     training_status[task_id] = {
@@ -171,7 +169,7 @@ async def prepare_training_data(background_tasks: BackgroundTasks):
                 cwd="/home/mirko/nfr-ml",
                 capture_output=True,
                 text=True,
-                timeout=600  # 10 minuti max
+                timeout=600
             )
             
             if result.returncode == 0:
@@ -209,9 +207,68 @@ async def prepare_training_data(background_tasks: BackgroundTasks):
         task_id=task_id
     )
 
+# ==================== TRAINING LSTM ====================
+
+@app.post("/train/lstm", response_model=TrainResponse)
+async def train_lstm_model(background_tasks: BackgroundTasks, epochs: int = 50):
+    """Allena il modello LSTM"""
+    
+    task_id = f"train_lstm_{int(time.time())}"
+    training_status[task_id] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat(),
+        "progress": 0,
+        "epochs": epochs
+    }
+    
+    def run_training():
+        try:
+            result = subprocess.run(
+                ["python", "models/train_lstm.py", "--epochs", str(epochs)],
+                cwd="/home/mirko/nfr-ml",
+                capture_output=True,
+                text=True,
+                timeout=3600  # 1 ora max
+            )
+            
+            if result.returncode == 0:
+                training_status[task_id] = {
+                    "status": "completed",
+                    "output": result.stdout,
+                    "error": None,
+                    "completed_at": datetime.now().isoformat()
+                }
+            else:
+                training_status[task_id] = {
+                    "status": "failed",
+                    "output": result.stdout,
+                    "error": result.stderr,
+                    "completed_at": datetime.now().isoformat()
+                }
+        except subprocess.TimeoutExpired:
+            training_status[task_id] = {
+                "status": "failed",
+                "error": "Training timeout (>1 hour)",
+                "completed_at": datetime.now().isoformat()
+            }
+        except Exception as e:
+            training_status[task_id] = {
+                "status": "failed",
+                "error": str(e),
+                "completed_at": datetime.now().isoformat()
+            }
+    
+    background_tasks.add_task(run_training)
+    
+    return TrainResponse(
+        status="started",
+        message=f"LSTM training started with {epochs} epochs",
+        task_id=task_id
+    )
+
 @app.get("/train/status/{task_id}")
 async def get_training_status(task_id: str):
-    """Controlla lo status di un task di training"""
+    """Controlla lo status di un task"""
     if task_id not in training_status:
         return {"error": "Task not found"}
     
@@ -219,7 +276,7 @@ async def get_training_status(task_id: str):
 
 @app.get("/train/status")
 async def list_all_tasks():
-    """Lista tutti i task di training"""
+    """Lista tutti i task"""
     return {
         "tasks": training_status,
         "count": len(training_status)
@@ -229,7 +286,7 @@ async def list_all_tasks():
 
 @app.get("/data/info")
 async def get_data_info():
-    """Restituisce info sui dataset disponibili"""
+    """Info sui dataset"""
     
     metadata_path = "/home/mirko/nfr-ml/data/metadata.json"
     
@@ -241,13 +298,50 @@ async def get_data_info():
     
     return metadata
 
+# ==================== PREDICTION ====================
+
+class PredictRequest(BaseModel):
+    variant_id: str
+
+class PredictResponse(BaseModel):
+    variant_id: str
+    forecast_7d: float
+    forecast_14d: float
+    forecast_30d: float
+    confidence: float
+    generated_at: str
+
+@app.post("/predict/demand", response_model=PredictResponse)
+async def predict_demand(request: PredictRequest):
+    """Prevede la domanda per un variant"""
+    try:
+        result = subprocess.run(
+            ["python", "models/predict.py", "--variant_id", request.variant_id],
+            cwd="/home/mirko/nfr-ml",
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode == 0:
+            prediction = json.loads(result.stdout)
+            return PredictResponse(**prediction)
+        else:
+            return {
+                "error": "Prediction failed",
+                "details": result.stderr
+            }
+    except Exception as e:
+        return {
+            "error": str(e)
+        }
+
 # ==================== SYSTEM INFO ====================
 
 @app.get("/system/info")
 async def system_info():
-    """Info sul sistema"""
+    """Info sistema"""
     try:
-        # Disk usage
         disk = subprocess.run(
             ["df", "-h", "/home/mirko/nfr-ml"],
             capture_output=True,
