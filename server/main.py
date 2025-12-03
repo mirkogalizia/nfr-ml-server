@@ -1,5 +1,6 @@
 from fastapi import FastAPI, BackgroundTasks
 from pydantic import BaseModel
+from typing import Optional
 import tensorflow as tf
 import subprocess
 import json
@@ -17,13 +18,13 @@ class HealthResponse(BaseModel):
 class CommandResponse(BaseModel):
     status: str
     message: str
-    output: str = None
-    error: str = None
+    output: Optional[str] = ""
+    error: Optional[str] = ""
 
 class TrainResponse(BaseModel):
     status: str
     message: str
-    task_id: str = None
+    task_id: Optional[str] = None
 
 # Storage per status training
 training_status = {}
@@ -59,12 +60,13 @@ async def git_pull():
             status="success" if result.returncode == 0 else "error",
             message="Git pull completed" if result.returncode == 0 else "Git pull failed",
             output=result.stdout,
-            error=result.stderr if result.returncode != 0 else None
+            error=result.stderr if result.returncode != 0 else ""
         )
     except Exception as e:
         return CommandResponse(
             status="error",
             message="Exception during git pull",
+            output="",
             error=str(e)
         )
 
