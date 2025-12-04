@@ -332,6 +332,41 @@ async def predict_demand(request: PredictRequest):
             "message": str(e)
         }
 
+@app.get("/predict/top-variants")
+async def predict_top_variants(top_n: int = 50):
+    """
+    Genera forecast per i top N variants per volume vendite
+    
+    Args:
+        top_n: Numero di top variants da processare (default: 50)
+    
+    Returns:
+        JSON con forecast per ogni variant
+    """
+    try:
+        result = subprocess.run(
+            ["python", "models/predict_batch.py", str(top_n)],
+            cwd="/home/mirko/nfr-ml",
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        
+        if result.returncode == 0:
+            predictions = json.loads(result.stdout)
+            return predictions
+        else:
+            return {
+                "status": "error",
+                "message": "Batch prediction failed",
+                "details": result.stderr
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
 # ==================== MODELS INFO ====================
 
 @app.get("/models/info")
@@ -413,5 +448,6 @@ async def gpu_status():
         return {
             "status": "error",
             "error": str(e)
+        }
         }
 
