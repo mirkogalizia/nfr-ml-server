@@ -608,3 +608,51 @@ async def prepare_blanks_data(background_tasks: BackgroundTasks):
         "message": "Blanks data preparation started",
         "task_id": task_id
     }
+@app.post("/blanks/generate-mapping")
+async def generate_blanks_mapping(background_tasks: BackgroundTasks):
+    """
+    Genera il mapping varianti -> blanks da Shopify
+    """
+    task_id = f"generate_mapping_{int(time.time())}"
+    training_status[task_id] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat()
+    }
+    
+    def run_generation():
+        try:
+            result = subprocess.run(
+                ["python", "scripts/generate_blanks_mapping.py"],
+                cwd="/home/mirko/nfr-ml",
+                capture_output=True,
+                text=True,
+                timeout=600
+            )
+            
+            if result.returncode == 0:
+                training_status[task_id] = {
+                    "status": "completed",
+                    "output": result.stdout,
+                    "completed_at": datetime.now().isoformat()
+                }
+            else:
+                training_status[task_id] = {
+                    "status": "failed",
+                    "output": result.stdout,
+                    "error": result.stderr,
+                    "completed_at": datetime.now().isoformat()
+                }
+        except Exception as e:
+            training_status[task_id] = {
+                "status": "failed",
+                "error": str(e),
+                "completed_at": datetime.now().isoformat()
+            }
+    
+    background_tasks.add_task(run_generation)
+    
+    return {
+        "status": "started",
+        "message": "Blanks mapping generation started",
+        "task_id": task_id
+    }
