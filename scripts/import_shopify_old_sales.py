@@ -1,4 +1,39 @@
+import requests
+import firebase_admin
+from firebase_admin import credentials, firestore
+from datetime import datetime
+import time
+import os
 
+print("=" * 70)
+print("IMPORT VENDITE DA VECCHIO SHOPIFY STORE")
+print("=" * 70)
+
+# Configurazione Shopify da variabili d'ambiente
+SHOP_URL = os.getenv("OLD_SHOPIFY_STORE_URL", "imjsqk-my.myshopify.com")
+ACCESS_TOKEN = os.getenv("OLD_SHOPIFY_ACCESS_TOKEN")
+
+if not ACCESS_TOKEN:
+    print("❌ Errore: OLD_SHOPIFY_ACCESS_TOKEN non configurato")
+    exit(1)
+
+API_VERSION = "2024-10"
+
+headers = {
+    "X-Shopify-Access-Token": ACCESS_TOKEN,
+    "Content-Type": "application/json"
+}
+
+# Init Firebase
+cred = credentials.Certificate("serviceAccountKey.json")
+try:
+    firebase_admin.initialize_app(cred)
+except:
+    pass
+
+db = firestore.client()
+
+print(f"\n📡 Connessione a: {SHOP_URL}")
 
 # 1. Recupera ordini da Shopify
 def get_all_orders():
@@ -117,6 +152,6 @@ if orders:
     print(f"Items venduti: {total_items}")
 
 print("\n💡 Prossimi step:")
-print("   1. Rilanciare /train/prepare-data per rigenerare train.csv")
-print("   2. Rilanciare /train/lstm per ri-trainare il modello con più storico")
+print("   1. Rilanciare /train/prepare-data")
+print("   2. Rilanciare /train/lstm")
 print("\n" + "=" * 70)
