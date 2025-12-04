@@ -35,25 +35,25 @@ for doc in graphics_blanks_ref:
 
 print(f"✅ Mappati {len(mapping)} variant_id grafiche → blanks")
 
-# 2. Genera forecast per top variants usando il modello LSTM
-print("\n🤖 Generazione forecast ML per top variants...")
+# 2. Carica TUTTI i variants (non solo top 100)
+print("\n🤖 Caricamento tutti i variants con vendite...")
 
-# Leggi train.csv per trovare i top variants
 train_df = pd.read_csv('data/train.csv')
 train_df['variant_id'] = train_df['variant_id'].astype(str)
 
-# Top 100 variants per volume
-top_variants = train_df.groupby('variant_id')['quantity'].sum().sort_values(ascending=False).head(100)
+# TUTTI i variants unici (non limitare a 100!)
+all_variants = train_df['variant_id'].unique()
 
-print(f"   Processando {len(top_variants)} top variants...")
+print(f"   Trovati {len(all_variants)} variants unici da processare")
 
-# Carica modello e genera forecast
+# Carica modello
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 from tensorflow import keras
 import joblib
 import numpy as np
 
+print("   Caricamento modello LSTM...")
 model = keras.models.load_model('models/artifacts/lstm_demand_forecast.h5', compile=False)
 scaler_X = joblib.load('models/artifacts/scaler_X.pkl')
 scaler_y = joblib.load('models/artifacts/scaler_y.pkl')
@@ -64,14 +64,20 @@ feature_cols = [
     'trend_7d', 'is_month_start', 'is_month_end', 'quarter', 'avg_order_value'
 ]
 
-# 3. Genera forecast e mappa ai blanks
+# 3. Genera forecast per TUTTI i variants
 blanks_forecast = []
+processed_count = 0
+skipped_count = 0
 
-for variant_id in top_variants.index:
+for idx, variant_id in enumerate(all_variants):
+    if (idx + 1) % 100 == 0:
+        print(f"   Processati {idx + 1}/{len(all_variants)} variants...")
+    
     # Forecast per questa grafica
     variant_data = train_df[train_df['variant_id'] == variant_id].tail(1)
     
     if len(variant_data) == 0:
+        skipped_count += 1
         continue
     
     try:
@@ -99,11 +105,15 @@ for variant_id in top_variants.index:
                 'forecast_14d': forecast_14d,
                 'forecast_30d': forecast_30d
             })
+            processed_count += 1
+        else:
+            skipped_count += 1
     except Exception as e:
-        print(f"   Errore variant {variant_id}: {e}")
+        skipped_count += 1
         continue
 
-print(f"✅ Generati {len(blanks_forecast)} forecast mappati ai blanks")
+print(f"\n✅ Generati {processed_count} forecast mappati ai blanks")
+print(f"⚠️  Skipped {skipped_count} variants (no mapping o errori)")
 
 # 4. Aggrega per blank + taglia + colore
 df_forecast = pd.DataFrame(blanks_forecast)
@@ -170,6 +180,11 @@ for _, row in by_size.iterrows():
 # 6. Salva JSON
 output = {
     "generated_at": pd.Timestamp.now().isoformat(),
+    "metadata": {
+        "total_variants_processed": processed_count,
+        "variants_skipped": skipped_count,
+        "total_variants": len(all_variants)
+    },
     "forecast_period": {
         "7_days": "Next 7 days",
         "14_days": "Next 14 days",
