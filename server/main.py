@@ -449,5 +449,5 @@ async def gpu_status():
             "status": "error",
             "error": str(e)
         }
-        }
+        
 
