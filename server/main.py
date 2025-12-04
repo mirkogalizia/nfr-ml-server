@@ -482,3 +482,33 @@ async def gpu_status():
             "status": "error",
             "error": str(e)
         }
+@app.get("/forecast/blanks-demand")
+async def forecast_blanks_demand():
+    """
+    Prevede la domanda futura di blanks usando ML
+    (basato sui forecast delle grafiche mappati ai blanks)
+    """
+    try:
+        result = subprocess.run(
+            ["python", "scripts/forecast_blanks_demand.py"],
+            cwd="/home/mirko/nfr-ml",
+            capture_output=True,
+            text=True,
+            timeout=180
+        )
+        
+        if result.returncode == 0:
+            with open('/home/mirko/nfr-ml/data/blanks_forecast.json', 'r') as f:
+                forecast = json.load(f)
+            return forecast
+        else:
+            return {
+                "status": "error",
+                "message": "Forecast failed",
+                "details": result.stderr
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
