@@ -512,3 +512,51 @@ async def forecast_blanks_demand():
             "status": "error",
             "message": str(e)
         }
+@app.post("/import/shopify-old-sales")
+async def import_shopify_old_sales(background_tasks: BackgroundTasks):
+    """
+    Importa vendite dal vecchio store Shopify
+    """
+    task_id = f"import_old_sales_{int(time.time())}"
+    training_status[task_id] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat()
+    }
+    
+    def run_import():
+        try:
+            result = subprocess.run(
+                ["python", "scripts/import_shopify_old_sales.py"],
+                cwd="/home/mirko/nfr-ml",
+                capture_output=True,
+                text=True,
+                timeout=1800  # 30 minuti
+            )
+            
+            if result.returncode == 0:
+                training_status[task_id] = {
+                    "status": "completed",
+                    "output": result.stdout,
+                    "completed_at": datetime.now().isoformat()
+                }
+            else:
+                training_status[task_id] = {
+                    "status": "failed",
+                    "output": result.stdout,
+                    "error": result.stderr,
+                    "completed_at": datetime.now().isoformat()
+                }
+        except Exception as e:
+            training_status[task_id] = {
+                "status": "failed",
+                "error": str(e),
+                "completed_at": datetime.now().isoformat()
+            }
+    
+    background_tasks.add_task(run_import)
+    
+    return {
+        "status": "started",
+        "message": "Import started in background",
+        "task_id": task_id
+    }
