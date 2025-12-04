@@ -656,3 +656,74 @@ async def generate_blanks_mapping(background_tasks: BackgroundTasks):
         "message": "Blanks mapping generation started",
         "task_id": task_id
     }
+@app.post("/config/set-shopify-token")
+async def set_shopify_token(token: str, store_url: str = "weh90f-1e.myshopify.com"):
+    """
+    Configura il token Shopify come variabile d'ambiente
+    """
+    import os
+    os.environ['SHOPIFY_ACCESS_TOKEN'] = token
+    os.environ['SHOPIFY_STORE_URL'] = store_url
+    
+    return {
+        "status": "success",
+        "message": f"Shopify token configured for {store_url}"
+    }
+@app.post("/blanks/merge-mappings")
+async def merge_blanks_mappings(background_tasks: BackgroundTasks):
+    """
+    Genera e unisce mapping da vecchio + nuovo store Shopify
+    """
+    task_id = f"merge_mappings_{int(time.time())}"
+    training_status[task_id] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat()
+    }
+    
+    def run_merge():
+        try:
+            result = subprocess.run(
+                ["python", "scripts/merge_blanks_mappings.py"],
+                cwd="/home/mirko/nfr-ml",
+                capture_output=True,
+                text=True,
+                timeout=900  # 15 minuti
+            )
+            
+            if result.returncode == 0:
+                training_status[task_id] = {
+                    "status": "completed",
+                    "output": result.stdout,
+                    "completed_at": datetime.now().isoformat()
+                }
+            else:
+                training_status[task_id] = {
+                    "status": "failed",
+                    "output": result.stdout,
+                    "error": result.stderr,
+                    "completed_at": datetime.now().isoformat()
+                }
+        except Exception as e:
+            training_status[task_id] = {
+                "status": "failed",
+                "error": str(e),
+                "completed_at": datetime.now().isoformat()
+            }
+    
+    background_tasks.add_task(run_merge)
+    
+    return {
+        "status": "started",
+        "message": "Merging old + new store mappings",
+        "task_id": task_id
+    }
+@app.post("/config/set-old-shopify-token")
+async def set_old_shopify_token(old_token: str, new_token: str):
+    """Configura token per vecchio E nuovo store"""
+    import os
+    os.environ['OLD_SHOPIFY_ACCESS_TOKEN'] = old_token
+    os.environ['OLD_SHOPIFY_STORE_URL'] = 'imjsqk-my.myshopify.com'
+    os.environ['SHOPIFY_ACCESS_TOKEN'] = new_token
+    os.environ['SHOPIFY_STORE_URL'] = 'weh90f-1e.myshopify.com'
+    
+    return {"status": "success", "message": "Both tokens configured"}
