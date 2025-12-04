@@ -560,3 +560,51 @@ async def import_shopify_old_sales(background_tasks: BackgroundTasks):
         "message": "Import started in background",
         "task_id": task_id
     }
+@app.post("/train/prepare-blanks-data")
+async def prepare_blanks_data(background_tasks: BackgroundTasks):
+    """
+    Prepara dataset aggregando vendite ai blanks PRIMA del ML
+    """
+    task_id = f"prepare_blanks_data_{int(time.time())}"
+    training_status[task_id] = {
+        "status": "running",
+        "started_at": datetime.now().isoformat()
+    }
+    
+    def run_preparation():
+        try:
+            result = subprocess.run(
+                ["python", "scripts/prepare_blanks_data.py"],
+                cwd="/home/mirko/nfr-ml",
+                capture_output=True,
+                text=True,
+                timeout=600
+            )
+            
+            if result.returncode == 0:
+                training_status[task_id] = {
+                    "status": "completed",
+                    "output": result.stdout,
+                    "completed_at": datetime.now().isoformat()
+                }
+            else:
+                training_status[task_id] = {
+                    "status": "failed",
+                    "output": result.stdout,
+                    "error": result.stderr,
+                    "completed_at": datetime.now().isoformat()
+                }
+        except Exception as e:
+            training_status[task_id] = {
+                "status": "failed",
+                "error": str(e),
+                "completed_at": datetime.now().isoformat()
+            }
+    
+    background_tasks.add_task(run_preparation)
+    
+    return {
+        "status": "started",
+        "message": "Blanks data preparation started",
+        "task_id": task_id
+    }
