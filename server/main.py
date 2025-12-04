@@ -494,7 +494,7 @@ async def forecast_blanks_demand():
             cwd="/home/mirko/nfr-ml",
             capture_output=True,
             text=True,
-            timeout=180
+            timeout=3600
         )
         
         if result.returncode == 0:
@@ -530,7 +530,7 @@ async def import_shopify_old_sales(background_tasks: BackgroundTasks):
                 cwd="/home/mirko/nfr-ml",
                 capture_output=True,
                 text=True,
-                timeout=1800  # 30 minuti
+                timeout=3600  # 30 minuti
             )
             
             if result.returncode == 0:
