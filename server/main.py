@@ -367,6 +367,39 @@ async def predict_top_variants(top_n: int = 50):
             "message": str(e)
         }
 
+# ==================== ANALYTICS ====================
+
+@app.get("/analytics/blanks-detailed")
+async def analyze_blanks_detailed():
+    """
+    Analizza vendite blanks con mapping grafiche → blanks reale
+    (taglia, colore, tipologia)
+    """
+    try:
+        result = subprocess.run(
+            ["python", "scripts/analyze_blanks_sales_real.py"],
+            cwd="/home/mirko/nfr-ml",
+            capture_output=True,
+            text=True,
+            timeout=120
+        )
+        
+        if result.returncode == 0:
+            with open('/home/mirko/nfr-ml/data/blanks_sales_detailed.json', 'r') as f:
+                analysis = json.load(f)
+            return analysis
+        else:
+            return {
+                "status": "error",
+                "message": "Analysis failed",
+                "details": result.stderr
+            }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
+        }
+
 # ==================== MODELS INFO ====================
 
 @app.get("/models/info")
@@ -448,5 +481,4 @@ async def gpu_status():
         return {
             "status": "error",
             "error": str(e)
-}
-        
+        }
